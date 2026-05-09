@@ -1,191 +1,82 @@
-If you have a VPS with **Ubuntu + Nginx**, you basically have three clean paths to add email. The right choice depends on whether you want:
+# Mail Implementations
 
-* Full control (self-hosted mail server)
-* Simplicity and reliability (hosted provider)
-* Hybrid (self-host app + external mail relay)
-
-Below are your realistic options with pros, cons, and DevOps perspective.
+Reference guide for deploying email infrastructure as a sysadmin or DevOps engineer. Covers every major approach: from managed cloud providers to fully self-hosted stacks.
 
 ---
 
-# 🟢 Option 1 — Use a Managed Email Provider (Recommended)
+## Quick Decision
 
-Instead of hosting mail on your VPS, you point your domain’s MX records to a provider.
+**Need human mailboxes (inbox)?** → [Managed Providers](#managed-providers)
 
-### Popular Providers
+**Need your app to send email?** → [External SMTP Relay](#external-smtp-relay)
 
-* Google Workspace
-* Microsoft 365
-* Zoho Mail
-* Proton Mail
+**Want full control / data sovereignty?** → [Self-Hosted](#self-hosted)
 
-### How it works
-
-1. Add MX records to your DNS
-2. Add SPF, DKIM, DMARC
-3. Done
-
-### Example DNS
-
-```dns
-MX  10  mail.provider.com
-TXT "v=spf1 include:_spf.provider.com ~all"
-```
-
-### Pros
-
-* No maintenance
-* No IP reputation issues
-* Built-in spam filtering
-* 99.9% uptime
-* Less attack surface
-
-### Cons
-
-* Monthly cost per user
-
-### When to choose this?
-
-If this is business/production mail → choose this.
+Not sure? → [Full Comparison](comparison.md)
 
 ---
 
-# 🟡 Option 2 — Self-Host Mail Server on Your VPS
+## External SMTP Relay
 
-You install a full mail stack.
+Your app or server sends email through a third-party relay. No IP reputation management. No mail server to run.
 
-### Typical Stack
+| Guide | Summary |
+|---|---|
+| [Amazon SES](external-smtp-relay/amazon-ses.md) | Cheapest at scale, AWS-native |
+| [SendGrid](external-smtp-relay/sendgrid.md) | Best DX, marketing + transactional |
+| [Mailgun](external-smtp-relay/mailgun.md) | API-first, excellent logs |
+| [Postmark](external-smtp-relay/postmark.md) | Fastest delivery, transactional only |
 
-* Postfix (SMTP)
-* Dovecot (IMAP/POP3)
-* SpamAssassin
-* OpenDKIM
-* Postfixadmin (optional UI)
-
-Or use a packaged solution:
-
-* Mailcow
-* iRedMail
-* Mail-in-a-Box
-
-If you're DevOps-focused, **Mailcow (Docker-based)** is clean and modern.
+→ [Category overview + common setup pattern](external-smtp-relay/README.md)
 
 ---
 
-## ⚠️ Critical Reality About Self Hosting
+## Self-Hosted
 
-Before you go this route, check:
+You run the mail server on your own VPS. Full control, no per-user cost, but you own the operational burden.
 
-### 1️⃣ Is port 25 open?
+| Guide | Summary |
+|---|---|
+| [Mailcow](self-hosted/mailcow.md) | Docker-based, recommended default |
+| [iRedMail](self-hosted/iredmail.md) | Script install, no Docker needed |
+| [Mail-in-a-Box](self-hosted/mail-in-a-box.md) | Automated everything, personal use |
+| [Postfix + Dovecot](self-hosted/postfix-dovecot.md) | Manual stack, learn the internals |
+| [Zimbra](self-hosted/zimbra/) | Enterprise suite: email + calendar + contacts |
 
-Many VPS providers block outbound 25.
-
-```bash
-telnet gmail-smtp-in.l.google.com 25
-```
-
-### 2️⃣ Reverse DNS (PTR record)
-
-You must set:
-
-```
-your.server.ip → mail.yourdomain.com
-```
-
-Without this → your emails go to spam.
-
-### 3️⃣ IP reputation
-
-If your VPS IP is previously abused → Gmail will silently spam you.
+→ [Category overview + pre-flight checklist](self-hosted/README.md)
 
 ---
 
-## DNS Required for Self-Hosting
+## Managed Providers
 
-```dns
-A      mail.yourdomain.com → your VPS IP
-MX     10 mail.yourdomain.com
-TXT    v=spf1 mx ~all
-TXT    v=DMARC1; p=quarantine; rua=mailto:dmarc@yourdomain.com
-```
+Point your MX records at a provider. They handle everything. You pay per user per month.
 
-Plus DKIM key.
+| Guide | Summary |
+|---|---|
+| [Google Workspace](managed-providers/google-workspace.md) | Gmail for your domain |
+| [Microsoft 365](managed-providers/microsoft-365.md) | Outlook + Office for your domain |
+| [Zoho Mail](managed-providers/zoho-mail.md) | Free tier for up to 5 users |
 
----
-
-### Pros
-
-* Full control
-* Unlimited accounts
-* No per-user cost
-
-### Cons
-
-* Spam reputation management
-* Constant maintenance
-* Security hardening required
-* Blacklisting risk
-* Time consuming
+→ [Category overview](managed-providers/README.md)
 
 ---
 
-# 🟠 Option 3 — Hybrid (Best for Developers)
+## Comparison
 
-Use your VPS for:
-
-* Web apps
-* Transactional emails
-
-But send mail via SMTP relay like:
-
-* SendGrid
-* Mailgun
-* Amazon SES
-
-This avoids IP reputation issues.
-
-Example Postfix relay config:
-
-```
-relayhost = [smtp.sendgrid.net]:587
-smtp_sasl_auth_enable = yes
-```
-
-This is perfect for:
-
-* App notifications
-* Password reset emails
-* DevOps alerts
+→ **[Full comparison of all options](comparison.md)** — side-by-side tables, decision flowchart, and DNS quick reference.
 
 ---
 
-# 🔥 What I Recommend For You
+## DNS Fundamentals
 
-Since you’re technical and comfortable with Linux:
+Every mail setup — regardless of provider — requires these records:
 
-### If this is business email:
+| Record | Purpose |
+|---|---|
+| `MX` | Where incoming mail is delivered |
+| `SPF` (TXT) | Which servers are allowed to send for your domain |
+| `DKIM` (TXT/CNAME) | Cryptographic signature proving mail wasn't tampered with |
+| `DMARC` (TXT) | Policy for what to do when SPF/DKIM fail |
+| `PTR` | Reverse DNS — required for self-hosted, set by VPS provider |
 
-→ Use Zoho or Google Workspace.
-
-### If this is learning / homelab:
-
-→ Deploy Mailcow in Docker.
-
-### If this is just app notifications:
-
-→ Use Amazon SES or SendGrid relay.
-
----
-
-# 💡 Memorization Trick
-
-Think of email hosting like:
-
-* 🏢 Google/Microsoft = Renting an apartment
-* 🏠 Self-host = Building your own house
-* 🛠 SMTP relay = Using a courier service
-
-Most production systems use option 1 or 3.
-
----
-
+SPF + DKIM + DMARC together = email authentication. All three are required for production deliverability.
